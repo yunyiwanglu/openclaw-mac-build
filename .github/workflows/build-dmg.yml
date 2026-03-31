@@ -1,0 +1,53 @@
+name: Build macOS DMG
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-dmg:
+    runs-on: macos-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dmgbuild
+        run: pip install dmgbuild
+
+      - name: Download app (if stored as artifact)
+        run: |
+          # 如果 app 在仓库里，这步可以跳过
+          # 如果 app 在 Release 里，用 gh release download
+          echo "App should be in ./OpenClaw桌面版.app"
+
+      - name: Build DMG
+        run: |
+          dmgbuild \
+            -s ./dmg_settings.py \
+            "OpenClaw桌面版" \
+            OpenClaw桌面版_macos.dmg \
+            -D app="./OpenClaw桌面版.app"
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenClaw-macos-dmg
+          path: OpenClaw桌面版_macos.dmg
+          retention-days: 30
+
+      - name: Create Release (optional)
+        if: github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: OpenClaw桌面版 v1.0.${{ github.run_number }}
+          files: OpenClaw桌面版_macos.dmg
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
