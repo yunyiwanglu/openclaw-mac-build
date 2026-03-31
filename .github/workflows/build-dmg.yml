@@ -15,34 +15,50 @@ jobs:
         with:
           lfs: true
 
+      - name: Debug - List ZIP contents
+        run: |
+          echo "=== ZIP file info ==="
+          ls -la OpenClaw_macos.zip
+          echo ""
+          echo "=== ZIP contents ==="
+          unzip -l OpenClaw_macos.zip | head -50
+
       - name: Unzip app
         run: |
-          # List ZIP contents
-          unzip -l OpenClaw_macos.zip
+          # Create temp directory
+          mkdir -p ./extracted
           
-          # Unzip
-          unzip -q OpenClaw_macos.zip -d ./extracted
+          # Unzip with verbose output
+          unzip -v OpenClaw_macos.zip -d ./extracted || true
           
-          # Find and move .app (handle Chinese characters)
+          # List extracted contents
+          echo "=== Extracted contents ==="
+          find ./extracted -type d -maxdepth 3
+          
+          # Find .app directory
           APP_PATH=$(find ./extracted -name "*.app" -type d 2>/dev/null | head -1)
           echo "Found app: $APP_PATH"
           
           if [ -z "$APP_PATH" ]; then
-            echo "ERROR: No .app found in ZIP"
-            ls -la ./extracted/
+            echo "ERROR: No .app found"
+            echo "Listing all files:"
+            ls -laR ./extracted | head -100
             exit 1
           fi
           
-          # Get app name
+          # Get app name and move
           APP_NAME=$(basename "$APP_PATH")
           echo "App name: $APP_NAME"
           
-          # Move to root
-          mv "$APP_PATH" "./$APP_NAME"
-          rm -rf ./extracted
+          # Copy to root (use cp -R for macOS)
+          cp -R "$APP_PATH" "./$APP_NAME"
           
           # Verify
+          echo "=== App at root ==="
           ls -la ./
+          
+          # Cleanup
+          rm -rf ./extracted
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -57,6 +73,12 @@ jobs:
           # Find app name
           APP_NAME=$(find . -name "*.app" -type d -maxdepth 1 | head -1 | sed 's|^\./||')
           echo "Building DMG for: $APP_NAME"
+          
+          if [ -z "$APP_NAME" ]; then
+            echo "ERROR: No .app found at root"
+            ls -la ./
+            exit 1
+          fi
           
           dmgbuild \
             -s ./dmg_settings.py \
