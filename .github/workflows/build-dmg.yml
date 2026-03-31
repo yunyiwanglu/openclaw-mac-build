@@ -17,12 +17,32 @@ jobs:
 
       - name: Unzip app
         run: |
+          # List ZIP contents
+          unzip -l OpenClaw_macos.zip
+          
+          # Unzip
           unzip -q OpenClaw_macos.zip -d ./extracted
-          # 查找 .app 目录
-          APP_PATH=$(find ./extracted -name "*.app" -type d | head -1)
+          
+          # Find and move .app (handle Chinese characters)
+          APP_PATH=$(find ./extracted -name "*.app" -type d 2>/dev/null | head -1)
           echo "Found app: $APP_PATH"
-          mv "$APP_PATH" ./OpenClaw桌面版.app
+          
+          if [ -z "$APP_PATH" ]; then
+            echo "ERROR: No .app found in ZIP"
+            ls -la ./extracted/
+            exit 1
+          fi
+          
+          # Get app name
+          APP_NAME=$(basename "$APP_PATH")
+          echo "App name: $APP_NAME"
+          
+          # Move to root
+          mv "$APP_PATH" "./$APP_NAME"
           rm -rf ./extracted
+          
+          # Verify
+          ls -la ./
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -34,11 +54,15 @@ jobs:
 
       - name: Build DMG
         run: |
+          # Find app name
+          APP_NAME=$(find . -name "*.app" -type d -maxdepth 1 | head -1 | sed 's|^\./||')
+          echo "Building DMG for: $APP_NAME"
+          
           dmgbuild \
             -s ./dmg_settings.py \
             "OpenClaw桌面版" \
             OpenClaw桌面版_macos.dmg \
-            -D app="./OpenClaw桌面版.app"
+            -D app="./$APP_NAME"
 
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
