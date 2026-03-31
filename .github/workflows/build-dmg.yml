@@ -15,50 +15,40 @@ jobs:
         with:
           lfs: true
 
-      - name: Debug - List ZIP contents
+      - name: Extract and prepare app
         run: |
-          echo "=== ZIP file info ==="
-          ls -la OpenClaw_macos.zip
-          echo ""
           echo "=== ZIP contents ==="
-          unzip -l OpenClaw_macos.zip | head -50
-
-      - name: Unzip app
-        run: |
-          # Create temp directory
-          mkdir -p ./extracted
+          unzip -l OpenClaw_macos.zip | head -20
           
-          # Unzip with verbose output
-          unzip -v OpenClaw_macos.zip -d ./extracted || true
+          echo ""
+          echo "=== Extracting ==="
+          # Use ditto for better macOS compatibility
+          ditto -x -k OpenClaw_macos.zip ./extracted
           
-          # List extracted contents
-          echo "=== Extracted contents ==="
-          find ./extracted -type d -maxdepth 3
+          echo ""
+          echo "=== Extracted files ==="
+          ls -la ./extracted/
           
-          # Find .app directory
-          APP_PATH=$(find ./extracted -name "*.app" -type d 2>/dev/null | head -1)
-          echo "Found app: $APP_PATH"
+          echo ""
+          echo "=== Finding .app ==="
+          # Find .app directory (handle any name)
+          APP_PATH=$(find ./extracted -name "*.app" -type d -maxdepth 1 2>/dev/null | head -1)
+          echo "Found: $APP_PATH"
           
           if [ -z "$APP_PATH" ]; then
-            echo "ERROR: No .app found"
-            echo "Listing all files:"
-            ls -laR ./extracted | head -100
+            echo "ERROR: No .app found at depth 1"
+            echo "Searching deeper..."
+            find ./extracted -name "*.app" -type d
             exit 1
           fi
           
-          # Get app name and move
-          APP_NAME=$(basename "$APP_PATH")
-          echo "App name: $APP_NAME"
-          
-          # Copy to root (use cp -R for macOS)
-          cp -R "$APP_PATH" "./$APP_NAME"
-          
-          # Verify
-          echo "=== App at root ==="
-          ls -la ./
-          
-          # Cleanup
+          # Move to root with simple name
+          mv "$APP_PATH" ./OpenClaw.app
           rm -rf ./extracted
+          
+          echo ""
+          echo "=== Final app ==="
+          ls -la ./OpenClaw.app/
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -70,21 +60,11 @@ jobs:
 
       - name: Build DMG
         run: |
-          # Find app name
-          APP_NAME=$(find . -name "*.app" -type d -maxdepth 1 | head -1 | sed 's|^\./||')
-          echo "Building DMG for: $APP_NAME"
-          
-          if [ -z "$APP_NAME" ]; then
-            echo "ERROR: No .app found at root"
-            ls -la ./
-            exit 1
-          fi
-          
           dmgbuild \
             -s ./dmg_settings.py \
             "OpenClaw桌面版" \
             OpenClaw桌面版_macos.dmg \
-            -D app="./$APP_NAME"
+            -D app="./OpenClaw.app"
 
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
