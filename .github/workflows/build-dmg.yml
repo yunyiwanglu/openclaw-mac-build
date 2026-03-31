@@ -17,34 +17,42 @@ jobs:
 
       - name: Extract and prepare app
         run: |
-          echo "=== ZIP contents ==="
-          unzip -l OpenClaw_macos.zip | head -20
+          echo "=== ZIP file info ==="
+          ls -la OpenClaw_macos.zip
           
           echo ""
-          echo "=== Extracting ==="
-          # Use ditto for better macOS compatibility
-          ditto -x -k OpenClaw_macos.zip ./extracted
+          echo "=== Extracting with ditto ==="
+          # Create temp directory
+          mkdir -p ./temp
+          
+          # Extract using ditto (handles macOS-specific files)
+          ditto -x -k OpenClaw_macos.zip ./temp
           
           echo ""
-          echo "=== Extracted files ==="
-          ls -la ./extracted/
+          echo "=== Extracted contents ==="
+          ls -la ./temp/
           
           echo ""
           echo "=== Finding .app ==="
-          # Find .app directory (handle any name)
-          APP_PATH=$(find ./extracted -name "*.app" -type d -maxdepth 1 2>/dev/null | head -1)
+          # Find .app directory (any name)
+          APP_PATH=$(find ./temp -name "*.app" -type d -maxdepth 1 2>/dev/null | head -1)
           echo "Found: $APP_PATH"
           
           if [ -z "$APP_PATH" ]; then
-            echo "ERROR: No .app found at depth 1"
-            echo "Searching deeper..."
-            find ./extracted -name "*.app" -type d
+            echo "ERROR: No .app found"
+            find ./temp -type d -maxdepth 2
             exit 1
           fi
           
-          # Move to root with simple name
+          # Get app name
+          APP_NAME=$(basename "$APP_PATH")
+          echo "App name: $APP_NAME"
+          
+          # Move to root with simple ASCII name
           mv "$APP_PATH" ./OpenClaw.app
-          rm -rf ./extracted
+          
+          # Cleanup
+          rm -rf ./temp
           
           echo ""
           echo "=== Final app ==="
