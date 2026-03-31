@@ -10,8 +10,19 @@ jobs:
     runs-on: macos-latest
     
     steps:
-      - name: Checkout repository
+      - name: Checkout repository (with LFS)
         uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Unzip app
+        run: |
+          unzip -q OpenClaw_macos.zip -d ./extracted
+          # 查找 .app 目录
+          APP_PATH=$(find ./extracted -name "*.app" -type d | head -1)
+          echo "Found app: $APP_PATH"
+          mv "$APP_PATH" ./OpenClaw桌面版.app
+          rm -rf ./extracted
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -20,12 +31,6 @@ jobs:
 
       - name: Install dmgbuild
         run: pip install dmgbuild
-
-      - name: Download app (if stored as artifact)
-        run: |
-          # 如果 app 在仓库里，这步可以跳过
-          # 如果 app 在 Release 里，用 gh release download
-          echo "App should be in ./OpenClaw桌面版.app"
 
       - name: Build DMG
         run: |
@@ -42,7 +47,7 @@ jobs:
           path: OpenClaw桌面版_macos.dmg
           retention-days: 30
 
-      - name: Create Release (optional)
+      - name: Create Release
         if: github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v1
         with:
