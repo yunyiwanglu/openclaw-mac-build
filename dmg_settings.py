@@ -15,7 +15,7 @@ volume_name = 'OpenClaw桌面版'
 # Icon size and position
 icon_size = 96
 icon_locations = {
-    'OpenClaw桌面版.app': (140, 120),
+    'OpenClaw.app': (140, 120),
     'Applications': (500, 120),
 }
 
@@ -33,7 +33,7 @@ icon_view_settings = {
 
 # Create Applications symlink
 files = [
-    ('OpenClaw桌面版.app', 'OpenClaw桌面版.app'),
+    ('OpenClaw.app', 'OpenClaw.app'),
 ]
 
 # Symlinks
