@@ -28,35 +28,119 @@ jobs:
           echo "Reassembled size: $(du -sh OpenClaw_macos_fixed.zip)"
           rm part*
       
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
       - name: Extract and prepare app
         run: |
-          echo "=== ZIP info ==="
-          ls -la OpenClaw_macos_fixed.zip
+          python3 << 'PYEOF'
+          import zipfile
+          import os
+          import shutil
+          import stat
+
+          zip_path = "OpenClaw_macos_fixed.zip"
+          extract_dir = "./temp"
+          app_dest = "./OpenClaw.app"
+
+          # Remove existing temp and app
+          if os.path.exists(extract_dir):
+              shutil.rmtree(extract_dir)
+          if os.path.exists(app_dest):
+              shutil.rmtree(app_dest)
+
+          print(f"Opening {zip_path}...")
+          with zipfile.ZipFile(zip_path, 'r') as zf:
+              # First list what names are in the zip
+              names = zf.namelist()
+              print(f"Total entries: {len(names)}")
+              for n in names[:10]:
+                  print(f"  {n}")
+              if len(names) > 10:
+                  print(f"  ... and {len(names)-10} more")
+              
+              # Find the .app directory path
+              app_path_in_zip = None
+              for name in names:
+                  if name.endswith('.app/') or '.app\\' in name.replace('\\', '/'):
+                      # Get the root .app directory
+                      parts = name.replace('\\', '/').split('/')
+                      for i, part in enumerate(parts):
+                          if part.endswith('.app'):
+                              app_path_in_zip = '/'.join(parts[:i+1])
+                              break
+                      if app_path_in_zip:
+                          break
+              
+              if not app_path_in_zip:
+                  print("ERROR: .app not found in zip!")
+                  # Try to find any directory ending in .app
+                  for name in names:
+                      if '.app' in name.lower():
+                          print(f"  Possible: {name}")
+                  raise Exception(".app not found")
+              
+              print(f"Extracting .app from: {app_path_in_zip}")
+              
+              # Extract all files from .app path
+              for name in names:
+                  if not name.startswith(app_path_in_zip):
+                      continue
+                  # Strip the app path prefix to get relative path
+                  relative_name = name[len(app_path_in_zip):]
+                  if not relative_name:
+                      continue
+                  
+                  target = os.path.join(extract_dir, relative_name)
+                  
+                  # Create directory if needed
+                  parent_dir = os.path.dirname(target)
+                  if parent_dir and not os.path.exists(parent_dir):
+                      os.makedirs(parent_dir, exist_ok=True)
+                  
+                  # Extract file
+                  if name.endswith('/'):
+                      # Directory
+                      os.makedirs(target, exist_ok=True)
+                  else:
+                      # File - write with binary mode
+                      try:
+                          data = zf.read(name)
+                          with open(target, 'wb') as f:
+                              f.write(data)
+                      except Exception as e:
+                          print(f"  Warning: failed to extract {name}: {e}")
+                          continue
           
-          mkdir -p ./temp
-          ditto -x -k OpenClaw_macos_fixed.zip ./temp
+          print(f"\n=== Extracted contents ===")
+          for root, dirs, files in os.walk(extract_dir):
+              level = root.replace(extract_dir, '').count(os.sep)
+              if level < 2:
+                  print(f"  {os.path.basename(root)}/")
           
-          echo "=== Temp contents ==="
-          ls -la ./temp/
+          # Find .app in temp
+          app_in_temp = None
+          for item in os.listdir(extract_dir):
+              if item.endswith('.app'):
+                  app_in_temp = os.path.join(extract_dir, item)
+                  break
           
-          # Find .app directory
-          APP_PATH=$(find ./temp -name "*.app" -type d -maxdepth 2 2>/dev/null | head -1)
-          echo "Found: $APP_PATH"
+          if not app_in_temp:
+              print("ERROR: .app not found after extraction!")
+              raise Exception(".app not found")
           
-          if [ -z "$APP_PATH" ]; then
-            echo "ERROR: No .app found"
-            find ./temp -type d -maxdepth 3
-            exit 1
-          fi
+          print(f"\nMoving {app_in_temp} to {app_dest}")
+          shutil.move(app_in_temp, app_dest)
+          shutil.rmtree(extract_dir)
           
-          APP_NAME=$(basename "$APP_PATH")
-          echo "App name: $APP_NAME"
+          print(f"\n=== Final app contents ===")
+          for item in os.listdir(app_dest):
+              print(f"  {item}")
           
-          mv "$APP_PATH" ./OpenClaw.app
-          rm -rf ./temp
-          
-          echo "=== Final app ==="
-          ls -la ./OpenClaw.app/
+          print("\nDone!")
+          PYEOF
       
       - name: Fix Info.plist
         run: |
@@ -74,11 +158,6 @@ jobs:
           echo "=== Fixed Info.plist ==="
           /usr/libexec/PlistBuddy -c "Print :LSRequiresCarbon" "$PLIST" 2>/dev/null && echo "LSRequiresCarbon: STILL PRESENT (bad)" || echo "LSRequiresCarbon: removed (good)"
           /usr/libexec/PlistBuddy -c "Print :NSPrincipalClass" "$PLIST"
-      
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
       
       - name: Install dmgbuild
         run: pip install dmgbuild
