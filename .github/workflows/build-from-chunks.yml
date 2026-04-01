@@ -16,7 +16,7 @@ jobs:
       - name: Download chunks
         run: |
           RELEASE_ID=${{ github.event.inputs.release_id }}
-          for i in $(seq -f "%02g" 1 12); do
+          for i in $(seq -f "%02g" 1 14); do
             echo "Downloading part${i}..."
             curl -L -o "part$i" \
               "https://github.com/yunyiwanglu/openclaw-mac-build/releases/download/v1.0.0-test/OpenClaw_macos_fixed.zip.part$i"
