@@ -1,0 +1,109 @@
+name: Build DMG from Chunks
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_id:
+        description: 'Release ID with chunks'
+        required: true
+        default: '304016090'
+
+jobs:
+  build-dmg:
+    runs-on: macos-latest
+    
+    steps:
+      - name: Download chunks
+        run: |
+          RELEASE_ID=${{ github.event.inputs.release_id }}
+          for i in $(seq -f "%02g" 1 12); do
+            echo "Downloading part${i}..."
+            curl -L -o "part$i" \
+              "https://github.com/yunyiwanglu/openclaw-mac-build/releases/download/untagged-6587fd22c91c6a9fc73c/OpenClaw_macos_fixed.zip.part$i"
+          done
+      
+      - name: Reassemble zip
+        run: |
+          cat part* > OpenClaw_macos_fixed.zip
+          echo "Reassembled size: $(du -sh OpenClaw_macos_fixed.zip)"
+          rm part*
+      
+      - name: Extract and prepare app
+        run: |
+          echo "=== ZIP info ==="
+          ls -la OpenClaw_macos_fixed.zip
+          
+          mkdir -p ./temp
+          ditto -x -k OpenClaw_macos_fixed.zip ./temp
+          
+          echo "=== Temp contents ==="
+          ls -la ./temp/
+          
+          # Find .app directory
+          APP_PATH=$(find ./temp -name "*.app" -type d -maxdepth 2 2>/dev/null | head -1)
+          echo "Found: $APP_PATH"
+          
+          if [ -z "$APP_PATH" ]; then
+            echo "ERROR: No .app found"
+            find ./temp -type d -maxdepth 3
+            exit 1
+          fi
+          
+          APP_NAME=$(basename "$APP_PATH")
+          echo "App name: $APP_NAME"
+          
+          mv "$APP_PATH" ./OpenClaw.app
+          rm -rf ./temp
+          
+          echo "=== Final app ==="
+          ls -la ./OpenClaw.app/
+      
+      - name: Fix Info.plist
+        run: |
+          PLIST="./OpenClaw.app/Contents/Info.plist"
+          
+          # Remove LSRequiresCarbon
+          /usr/libexec/PlistBuddy -c "Delete :LSRequiresCarbon" "$PLIST" 2>/dev/null || true
+          
+          # Add NSPrincipalClass if missing
+          HAS_PRINCIPAL=$(/usr/libexec/PlistBuddy -c "Print :NSPrincipalClass" "$PLIST" 2>/dev/null && echo "yes" || echo "no")
+          if [ "$HAS_PRINCIPAL" = "no" ]; then
+            /usr/libexec/PlistBuddy -c "Add :NSPrincipalClass string NSApplication" "$PLIST"
+          fi
+          
+          echo "=== Fixed Info.plist ==="
+          /usr/libexec/PlistBuddy -c "Print :LSRequiresCarbon" "$PLIST" 2>/dev/null && echo "LSRequiresCarbon: STILL PRESENT (bad)" || echo "LSRequiresCarbon: removed (good)"
+          /usr/libexec/PlistBuddy -c "Print :NSPrincipalClass" "$PLIST"
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dmgbuild
+        run: pip install dmgbuild
+
+      - name: Build DMG
+        run: |
+          dmbuild \
+            -s ./dmg_settings.py \
+            "OpenClaw中文" \
+            OpenClaw中文_macos.dmg \
+            -D app="./OpenClaw.app"
+      
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenClaw-macos-dmg
+          path: OpenClaw中文_macos.dmg
+          retention-days: 30
+      
+      - name: Create Release
+        if: github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v1.0.fixed-${{ github.run_number }}
+          name: OpenClaw macOS Fixed Build v1.0.${{ github.run_number }}
+          files: OpenClaw中文_macos.dmg
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
