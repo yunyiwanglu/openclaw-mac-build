@@ -19,7 +19,7 @@ jobs:
           for i in $(seq -f "%02g" 1 12); do
             echo "Downloading part${i}..."
             curl -L -o "part$i" \
-              "https://github.com/yunyiwanglu/openclaw-mac-build/releases/download/untagged-6587fd22c91c6a9fc73c/OpenClaw_macos_fixed.zip.part$i"
+              "https://github.com/yunyiwanglu/openclaw-mac-build/releases/download/v1.0.0-test/OpenClaw_macos_fixed.zip.part$i"
           done
       
       - name: Reassemble zip
